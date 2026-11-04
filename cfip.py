@@ -80,20 +80,47 @@ def setup_logging(cfg: dict[str, Any]) -> None:
 
 
 def load_state() -> dict[str, Any]:
+    """state.json 只放「已发送日期」这类必须跟着仓库走的状态。
+
+    上次运行时间 / 上次 IP 属于易变信息，写到 logs/last.json（被 gitignore），
+    否则每次采集都会产生一次提交，把提交历史刷成垃圾。
+    """
     if STATE_PATH.exists():
         try:
             with STATE_PATH.open(encoding="utf-8") as f:
-                return json.load(f)
+                state = json.load(f)
+            return {"sent": dict(state.get("sent") or {})}
         except Exception:
             log.warning("state.json 解析失败，重建")
-    return {"sent": {}, "last_ip": "", "last_uptime": 0}
+    return {"sent": {}}
 
 
 def save_state(state: dict[str, Any]) -> None:
     tmp = STATE_PATH.with_suffix(".tmp")
     with tmp.open("w", encoding="utf-8") as f:
-        json.dump(state, f, ensure_ascii=False, indent=2)
+        json.dump({"sent": state.get("sent", {})}, f, ensure_ascii=False, indent=2)
     tmp.replace(STATE_PATH)
+
+
+def last_run_path() -> Path:
+    d = BASE_DIR / "logs"
+    d.mkdir(parents=True, exist_ok=True)
+    return d / "last.json"
+
+
+def save_last_run(entry: dict[str, Any]) -> None:
+    try:
+        last_run_path().write_text(
+            json.dumps(entry, ensure_ascii=False, indent=2), encoding="utf-8")
+    except Exception as exc:  # 只是展示用，失败不影响主流程
+        log.debug("写 last.json 失败: %s", exc)
+
+
+def load_last_run() -> dict[str, Any]:
+    try:
+        return json.loads(last_run_path().read_text(encoding="utf-8"))
+    except Exception:
+        return {}
 
 
 def data_dir(cfg: dict[str, Any]) -> Path:
@@ -329,11 +356,12 @@ def cmd_collect(cfg: dict[str, Any], dry_run: bool = False) -> int:
                  entry["ip"], entry["ping"], entry["speed"])
         return 0
     append_record(cfg, entry, now)
-    state = load_state()
-    state["last_ip"] = entry["ip"]
-    state["last_uptime"] = entry["uptime"]
-    state["last_run"] = now.isoformat(timespec="seconds")
-    save_state(state)
+    save_last_run({
+        "last_ip": entry["ip"],
+        "last_ping": entry["ping"],
+        "last_uptime": entry["uptime"],
+        "last_run": now.isoformat(timespec="seconds"),
+    })
     return 0
 
 
@@ -347,13 +375,14 @@ def cmd_run(cfg: dict[str, Any], dry_run: bool = False) -> int:
 
 def cmd_status(cfg: dict[str, Any]) -> int:
     state = load_state()
+    last = load_last_run()
     print(f"数据源     : {cfg['endpoint']}")
     print(f"线路       : {cfg['line']} ({LINE_LABEL.get(cfg['line'], '?')})")
     print(f"采集间隔   : {cfg.get('interval_minutes', 30)} 分钟")
     print(f"保留天数   : {cfg.get('retention_days', 3)} 天")
     print(f"收件人     : {', '.join(cfg.get('mail', {}).get('to') or [])}")
-    print(f"上次运行   : {state.get('last_run', '-')}")
-    print(f"上次 IP    : {state.get('last_ip', '-')}")
+    print(f"上次运行   : {last.get('last_run', '-')}")
+    print(f"上次 IP    : {last.get('last_ip', '-')}  {last.get('last_ping', '')}")
     print("存档:")
     for path in sorted(data_dir(cfg).glob("*.txt")):
         ips = existing_ips(path)

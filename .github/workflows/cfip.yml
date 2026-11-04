@@ -2,8 +2,10 @@ name: CFIP collect
 
 on:
   schedule:
-    # 每 30 分钟（UTC cron，北京时间也是每 30 分钟）
-    - cron: "*/30 * * * *"
+    # 每 5 分钟敲一次门，靠采集器自身去重把窗口收敛到「每个 10 分钟快照最多一条」。
+    # 之所以不写 */30：GitHub 的 cron 是排队尽力而为，延迟 5~30 分钟很常见，
+    # 5 分钟一跳等于给每个 30 分钟窗口 6 次机会，漏跳一次也不影响结果。
+    - cron: "*/5 * * * *"
   workflow_dispatch:
     inputs:
       task:

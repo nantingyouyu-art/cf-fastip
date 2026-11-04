@@ -1,4 +1,5 @@
 secrets.json
 logs/
+state.json.tmp
 __pycache__/
 *.pyc
