@@ -5,6 +5,13 @@ on:
     # 每 30 分钟（UTC cron，北京时间也是每 30 分钟）
     - cron: "*/30 * * * *"
   workflow_dispatch:
+    inputs:
+      task:
+        description: "要执行的动作"
+        required: false
+        default: run
+        type: choice
+        options: [run, test-mail, status]
 
 # 同一时间只允许一个实例，避免两次运行抢着提交
 concurrency:
@@ -33,7 +40,12 @@ jobs:
         run: python -m pip install --quiet requests
 
       - name: Collect + send due archive + purge
+        if: ${{ (inputs.task || 'run') == 'run' }}
         run: python cfip.py run
+
+      - name: Test mail
+        if: ${{ inputs.task == 'test-mail' }}
+        run: python cfip.py test-mail
 
       - name: Show status
         if: always()
