@@ -1,53 +1,81 @@
 /**
  * 外部触发：Cloudflare Worker Cron -> GitHub workflow_dispatch
  *
- * 为什么需要它：GitHub 自带的 schedule 是「排队尽力而为」，延迟 5~30 分钟很常见，
- * 偶尔整跳。Worker 的 cron 触发由 Cloudflare 调度，通常秒级准点。
+ * 用法：
+ *   https://<worker>/          -> 触发一次 dispatch，返回 HTTP 状态（204 = 受理）
+ *   https://<worker>/debug     -> 只做自检，不触发：看 GH_TOKEN 有没有配、能不能读到仓库
  *
- * 部署（3 步，全在你的 CF 账号内，token 不落到第三方）：
- *   1. 建 fine-grained PAT：GitHub -> Settings -> Developer settings ->
- *      Personal access tokens -> Fine-grained tokens
- *      - Repository access: Only select repositories -> cf-fastip
- *      - Permissions: Actions = Read and write（别的全 None）
- *      - Expiration: 10 天后自动过期（符合测试周期）
- *   2. cd external && npx wrangler deploy
- *      npx wrangler secret put GH_TOKEN      # 粘贴上面生成的 PAT
- *   3. 看 Worker 日志：npx wrangler tail
- *
- * 仓库/分支/工作流要改就改下面常量。
+ * 必需机密（Settings -> Variables and Secrets -> Secret）：
+ *   GH_TOKEN = fine-grained PAT，仓库 cf-fastip，权限 Actions: Read and write
  */
 
 const OWNER = "nantingyouyu-art";
 const REPO = "cf-fastip";
 const WORKFLOW = "cfip.yml";
 const REF = "main";
+const API = "https://api.github.com";
+
+function headers(token) {
+  return {
+    Authorization: `Bearer ${token}`,
+    Accept: "application/vnd.github+json",
+    "X-GitHub-Api-Version": "2022-11-28",
+    "User-Agent": "cfip-worker",
+    "Content-Type": "application/json",
+  };
+}
+
+async function dispatch(env) {
+  const url = `${API}/repos/${OWNER}/${REPO}/actions/workflows/${WORKFLOW}/dispatches`;
+  const res = await fetch(url, {
+    method: "POST",
+    headers: headers(env.GH_TOKEN),
+    body: JSON.stringify({ ref: REF }),
+  });
+  return { status: res.status, text: await res.text() };
+}
+
+async function selfCheck(env) {
+  const token = env.GH_TOKEN;
+  const out = {
+    token_present: Boolean(token),
+    token_prefix: token ? String(token).slice(0, 12) + "..." : null,
+    token_length: token ? String(token).length : 0,
+  };
+  if (token) {
+    const r = await fetch(`${API}/repos/${OWNER}/${REPO}`, { headers: headers(token) });
+    out.repo_read_status = r.status;
+    const a = await fetch(
+      `${API}/repos/${OWNER}/${REPO}/actions/workflows/${WORKFLOW}`,
+      { headers: headers(token) },
+    );
+    out.workflow_read_status = a.status;
+  }
+  return out;
+}
 
 export default {
   async scheduled(event, env, ctx) {
-    ctx.waitUntil(trigger(env));
+    ctx.waitUntil(
+      dispatch(env)
+        .then((r) => console.log(`cron dispatch ${r.status} ${r.text}`))
+        .catch((e) => console.error(`cron dispatch failed: ${e && e.stack || e}`)),
+    );
   },
-  // 手动验证：浏览器访问 https://<worker>.workers.dev/
+
   async fetch(request, env) {
-    const r = await trigger(env);
-    return new Response(`dispatch -> ${r.status} ${r.body}\n`, { status: 200 });
+    const path = new URL(request.url).pathname;
+    try {
+      if (path.startsWith("/debug")) {
+        const info = await selfCheck(env);
+        return new Response(JSON.stringify(info, null, 2) + "\n", {
+          headers: { "content-type": "application/json; charset=utf-8" },
+        });
+      }
+      const r = await dispatch(env);
+      return new Response(`dispatch -> ${r.status} ${r.text}\n`);
+    } catch (err) {
+      return new Response(`EXCEPTION: ${(err && err.stack) || err}\n`, { status: 200 });
+    }
   },
 };
-
-async function trigger(env) {
-  const url = `https://api.github.com/repos/${OWNER}/${REPO}/actions/workflows/${WORKFLOW}/dispatches`;
-  const res = await fetch(url, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${env.GH_TOKEN}`,
-      Accept: "application/vnd.github+json",
-      "X-GitHub-Api-Version": "2022-11-28",
-      "User-Agent": "cfip-worker",
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({ ref: REF }),
-  });
-  const body = await res.text();
-  // 204 = 已受理
-  console.log(`dispatch ${res.status} ${body}`);
-  return { status: res.status, body };
-}
