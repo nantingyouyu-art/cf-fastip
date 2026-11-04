@@ -1,0 +1,23 @@
+{
+  "endpoint": "https://api.uouin.com/index.php/index/Cloudflare",
+  "line": "ctcc",
+  "interval_minutes": 30,
+  "data_dir": "data",
+  "log_dir": "logs",
+  "retention_days": 3,
+  "proxy": "",
+  "mail": {
+    "enabled": true,
+    "smtp_host": "smtp.gmail.com",
+    "smtp_port": 465,
+    "use_ssl": true,
+    "username": "nantingyouyu@gmail.com",
+    "from": "nantingyouyu@gmail.com",
+    "to": [
+      "3537416276@qq.com"
+    ],
+    "password_env": "CFIP_SMTP_PASSWORD",
+    "password": "",
+    "subject": "【CF 优选 IP】{date} 电信最快节点汇总"
+  }
+}
