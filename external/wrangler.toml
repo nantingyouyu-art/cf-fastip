@@ -2,8 +2,12 @@ name = "cfip-trigger"
 main = "worker.js"
 compatibility_date = "2026-11-01"
 
-# 每 30 分钟准点敲一次 GitHub 的门（cron 用 UTC，*/30 = 每半小时）
+# 每 30 分钟准点触发一次 GitHub workflow（cron 用 UTC，*/30 = 每半小时）
 [triggers]
 crons = ["*/30 * * * *"]
 
-# GH_TOKEN 不放这里，用 `npx wrangler secret put GH_TOKEN` 存成加密 secret
+# workers.dev 在本账号上一直 1101（账号级故障），改走自有域名
+# 首次 deploy 会自动创建 proxied DNS 记录与边缘证书
+[[routes]]
+pattern = "cfip.quach.cc.cd"
+custom_domain = true

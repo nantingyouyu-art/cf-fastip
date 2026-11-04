@@ -93,6 +93,8 @@ checkout -> 装 requests -> python cfip.py run -> 展示 status -> 提交 data/ 
 - 密码放仓库 Secrets: `CFIP_SMTP_PASSWORD`，不写进代码
 - `TZ=Asia/Shanghai`，所以「按天归档 / 零点结算」都按北京时间
 - 数据有变化才提交，提交带自动 rebase 重试（并发安全）
+- 准点触发由 Cloudflare Worker 负责：`https://cfip.quach.cc.cd`（cron `*/30`）→ 调 GitHub dispatch API
+  （本账号 workers.dev 子域有账号级 1101 故障，因此走自有域名 `cfip.quach.cc.cd`）
 - 手动触发: `gh workflow run cfip.yml --repo nantingyouyu-art/cf-fastip -f task=test-mail`
   （`task` 可选 `run` / `test-mail` / `status`）
 

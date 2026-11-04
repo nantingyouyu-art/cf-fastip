@@ -1,5 +1,22 @@
 # 外部触发（让 30 分钟真正准点）
 
+> **实际部署现状（2026-11-04）**
+> 本账号的 `*.workers.dev` 存在账号级故障：任意脚本（含 8 字节 hello-world）访问即 `error code: 1101`，
+> `wrangler dev --remote` 预览正常、`wrangler tail` 收不到请求，换网络出口（r.jina.ai）同样失败。
+> 已放弃 workers.dev，改用自有域名 `https://cfip.quach.cc.cd`（`wrangler.toml` 里 `custom_domain = true`），
+> 一条命令即可复现部署：
+>
+> ```bash
+> cd external
+> npx wrangler login
+> npx wrangler deploy                # 自动创建 proxied DNS + 边缘证书 + cron */30
+> npx wrangler secret put GH_TOKEN   # 粘贴 fine-grained PAT
+> ```
+>
+> 自检：`curl https://cfip.quach.cc.cd/debug`（应返回 token_present/workflow_read_status=200）
+> 触发：`curl https://cfip.quach.cc.cd/`（应返回 `dispatch -> 204`）
+
+
 ## 为什么
 
 GitHub 自带的 `on.schedule` 不是闹钟，是队列：到点只是把任务扔进待执行的池子，
