@@ -1,0 +1,9 @@
+name = "cfip-trigger"
+main = "worker.js"
+compatibility_date = "2026-11-01"
+
+# 每 30 分钟准点敲一次 GitHub 的门（cron 用 UTC，*/30 = 每半小时）
+[triggers]
+crons = ["*/30 * * * *"]
+
+# GH_TOKEN 不放这里，用 `npx wrangler secret put GH_TOKEN` 存成加密 secret
