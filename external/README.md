@@ -10,7 +10,22 @@ GitHub 自带的 `on.schedule` 不是闹钟，是队列：到点只是把任务�
 
 ---
 
-## 方案 A：Cloudflare Worker Cron（推荐）
+---
+
+## 方案 A0：Cloudflare 面板部署（不用命令行，5 分钟）
+
+1. <https://dash.cloudflare.com> → 左侧 **Workers & Pages** → **Create** → **Worker**
+2. 名字填 `cfip-trigger` → **Deploy**（默认的 hello-world 代码先留着，下一步替换）
+3. 点 **Edit code**，把 `external/worker.js` 全文粘进去覆盖 → 右上 **Deploy**
+4. **Settings** → **Variables and Secrets** → **Add** → 类型选 **Secret**
+   Name = `GH_TOKEN`，Value = 你刚建的那个 `github_pat_...`
+   ⚠️ 一定选 Secret，别选 Text（Text 在面板里是明文可回显）
+5. **Settings** → **Trigger Events**（或 Triggers 标签）→ **Cron Triggers** → **Add Cron Trigger**
+   填 `*/30 * * * *`（UTC，正好每半小时）
+6. 验证：浏览器直接访问 `https://cfip-trigger.<你的子域>.workers.dev/`
+   页面显示 `dispatch -> 204` 就算通了；再看 GitHub Actions 多出一条 `workflow_dispatch` 运行
+
+## 方案 A：Cloudflare Worker Cron（命令行 wrangler）
 
 token 存在自己的 CF 账号里，不经过任何第三方站点。需要 PAT（10 天后自动过期）。
 
