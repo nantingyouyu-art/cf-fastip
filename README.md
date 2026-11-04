@@ -80,6 +80,36 @@ schtasks /Delete /TN CFIP-BestIP /F # 卸载
 任务用「只使用交互方式」登录类型，登录后即生效；注销/睡眠期间不运行，
 唤醒后下一次整 30 分会补跑（缺的时段不会补历史数据）。
 
+## 云端部署（推荐，电脑关机也照跑）
+
+仓库: <https://github.com/nantingyouyu-art/cf-fastip>（私有）
+
+`.github/workflows/cfip.yml` 每 30 分钟由 GitHub Actions 执行，流程：
+
+```
+checkout -> 装 requests -> python cfip.py run -> 展示 status -> 提交 data/ 与 state.json
+```
+
+- 密码放仓库 Secrets: `CFIP_SMTP_PASSWORD`，不写进代码
+- `TZ=Asia/Shanghai`，所以「按天归档 / 零点结算」都按北京时间
+- 数据有变化才提交，提交带自动 rebase 重试（并发安全）
+- 手动触发: `gh workflow run cfip.yml --repo nantingyouyu-art/cf-fastip -f task=test-mail`
+  （`task` 可选 `run` / `test-mail` / `status`）
+
+限制与须知：
+
+| 项 | 说明 |
+|---|---|
+| 定时精度 | GitHub cron 是尽力而为，高峰常延迟 5–20 分钟，偶发跳过 |
+| 计费 | 私有仓库每月 2000 分钟；每次运行约 1 分钟 → 约 1440 分钟/月，够用但别再加私有任务 |
+| 免费方案 | 仓库改公开后 Actions 不限分钟（内容只有 IP 列表，无密钥） |
+| 保活 | 每次提交都算仓库活动，不会被「60 天不活跃」停掉 schedule |
+| 本地副本 | 本地已移除原有的 `CFIP-BestIP` 计划任务，避免和云端重复；需要恢复就跑 `install_task.ps1` |
+
+## 本地部署（可选）
+
+`install_task.ps1` 注册 `CFIP-BestIP`，每 30 分钟本地跑一次；关机/注销期间不运行。
+
 ## 输出格式
 
 `data/2026-11-04.txt`
