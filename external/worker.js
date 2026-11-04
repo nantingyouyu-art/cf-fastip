@@ -2,8 +2,11 @@
  * 外部触发：Cloudflare Worker Cron -> GitHub workflow_dispatch
  *
  * 用法：
- *   https://<worker>/          -> 触发一次 dispatch，返回 HTTP 状态（204 = 受理）
- *   https://<worker>/debug     -> 只做自检，不触发：看 GH_TOKEN 有没有配、能不能读到仓库
+ *   https://<worker>/debug     -> 自检：GH_TOKEN 是否配置、能否读仓库（不触发）
+ *   https://<worker>/go        -> 触发一次 dispatch，返回 HTTP 状态（204 = 受理）
+ *   https://<worker>/          -> 说明页，不触发（避免浏览器预取/健康检查把 dispatch 打爆）
+ *
+ *   冷却：同一 isolate 内 20 秒只允许一次 dispatch，防止误刷/重试风暴。
  *
  * 必需机密（Settings -> Variables and Secrets -> Secret）：
  *   GH_TOKEN = fine-grained PAT，仓库 cf-fastip，权限 Actions: Read and write
@@ -54,6 +57,10 @@ async function selfCheck(env) {
   return out;
 }
 
+// 同一 isolate 内的简易冷却（跨 isolate 不共享，够挡住误刷）
+let lastDispatchAt = 0;
+const COOLDOWN_MS = 20 * 1000;
+
 export default {
   async scheduled(event, env, ctx) {
     ctx.waitUntil(
@@ -63,8 +70,9 @@ export default {
     );
   },
 
-  async fetch(request, env) {
-    const path = new URL(request.url).pathname;
+  async fetch(request, env, ctx) {
+    const url = new URL(request.url);
+    const path = url.pathname;
     try {
       if (path.startsWith("/debug")) {
         const info = await selfCheck(env);
@@ -72,7 +80,24 @@ export default {
           headers: { "content-type": "application/json; charset=utf-8" },
         });
       }
+      const wantsTrigger = path.startsWith("/go") || url.searchParams.get("go") === "1";
+      if (!wantsTrigger) {
+        return new Response(
+          "cfip-trigger\n\n" +
+          "  /debug  自检（不触发）\n" +
+          "  /go     立即触发一次 GitHub workflow_dispatch\n\n" +
+          "定时器由 cron 触发器负责，页面访问不会触发。\n",
+          { headers: { "content-type": "text/plain; charset=utf-8" } },
+        );
+      }
+      const now = Date.now();
+      if (now - lastDispatchAt < COOLDOWN_MS) {
+        return new Response(
+          `cooling down: ${Math.ceil((COOLDOWN_MS - (now - lastDispatchAt)) / 1000)}s\n`);
+      }
+      lastDispatchAt = now;
       const r = await dispatch(env);
+      console.log(`manual dispatch ${r.status} ua=${request.headers.get("user-agent") || "-"}`);
       return new Response(`dispatch -> ${r.status} ${r.text}\n`);
     } catch (err) {
       return new Response(`EXCEPTION: ${(err && err.stack) || err}\n`, { status: 200 });
