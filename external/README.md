@@ -3,7 +3,18 @@
 > **实际部署现状（2026-11-04）**
 > 本账号的 `*.workers.dev` 存在账号级故障：任意脚本（含 8 字节 hello-world）访问即 `error code: 1101`，
 > `wrangler dev --remote` 预览正常、`wrangler tail` 收不到请求，换网络出口（r.jina.ai）同样失败。
-> 已放弃 workers.dev，改用自有域名 `https://cfip.quach.cc.cd`（`wrangler.toml` 里 `custom_domain = true`），
+> **已定位并修复**：故障绑定在子域名 `haleloquach` 上（同名删除重建仍 1101，改名 `haleloquach-cf` 立刻恢复）。
+> 现两个入口均正常：
+> - `https://cfip-trigger.haleloquach-cf.workers.dev`（workers.dev）
+> - `https://cfip.quach.cc.cd`（自定义域名，国内可用，主入口）
+>
+> 注意：本机网络对 `*.workers.dev` 存在 DNS 投毒（解析到 157.240.21.9），直连会 TLS 失败，
+> 需走代理或用 DoH；`cfip.quach.cc.cd` 不受影响。
+>
+> 改子域名的方法：面板「Workers 和 Pages → 更改子域」，或 API
+> `DELETE` + `PUT /accounts/{id}/workers/subdomain {"subdomain":"新名字"}`。
+>
+> 早期结论（改名前）保留：workers.dev 全线 1101，
 > 一条命令即可复现部署：
 >
 > ```bash

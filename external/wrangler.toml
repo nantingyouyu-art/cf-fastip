@@ -1,6 +1,7 @@
 name = "cfip-trigger"
 main = "worker.js"
 compatibility_date = "2026-11-01"
+workers_dev = true
 
 # 每 30 分钟准点触发一次 GitHub workflow（cron 用 UTC，*/30 = 每半小时）
 [triggers]
