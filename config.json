@@ -2,6 +2,7 @@
   "endpoint": "https://api.uouin.com/index.php/index/Cloudflare",
   "line": "ctcc",
   "interval_minutes": 30,
+  "min_speed_mbps": 50,
   "data_dir": "data",
   "log_dir": "logs",
   "retention_days": 3,

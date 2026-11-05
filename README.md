@@ -52,6 +52,7 @@ python cfip.py test-mail           # 发一封 SMTP 连通性测试邮件
 |---|---|
 | `line` | 线路：`ctcc`(电信) / `cmcc`(移动) / `cucc`(联通) / `bgp`(三网) / `ipv6` |
 | `interval_minutes` | 采集间隔，仅用于文件头标注，实际节奏由计划任务控制 |
+| `min_speed_mbps` | 速度门槛，默认 50。首行速度必须**严格大于**该值，否则本轮跳过（不发信、不入库） |
 | `retention_days` | 存档保留天数，默认 3 |
 | `proxy` | 留空直连；需要时填 `http://127.0.0.1:7890` |
 | `mail.to` | 收件人列表 |

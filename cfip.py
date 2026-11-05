@@ -45,6 +45,10 @@ STATE_PATH = BASE_DIR / "state.json"
 _SEED = "DdlTxtN0sUOu"
 _SEED_MD5 = hashlib.md5(_SEED.encode()).hexdigest()
 _KEY_MIDDLE = "70cloudflareapikey"
+class SpeedBelowThreshold(RuntimeError):
+    """首行速度不达标：属于正常的跳过，不是错误。"""
+
+
 LINE_LABEL = {"ctcc": "电信", "cmcc": "移动", "cucc": "联通", "bgp": "三网", "ipv6": "IPv6"}
 IP_RE = re.compile(r"\b(?:\d{1,3}\.){3}\d{1,3}\b|[0-9a-fA-F:]{4,}:\w[0-9a-fA-F:]*")
 
@@ -164,8 +168,23 @@ def fetch_table(cfg: dict[str, Any], timeout: int = 20) -> dict[str, Any]:
     return payload["data"]
 
 
+def parse_speed_mbps(text: Any) -> float:
+    """'60.07mb/s' -> 60.07；解析不出来返回 0.0（当作不达标处理）。"""
+    m = re.search(r"([0-9]+(?:\.[0-9]+)?)", str(text or ""))
+    if not m:
+        return 0.0
+    try:
+        return float(m.group(1))
+    except ValueError:
+        return 0.0
+
+
 def pick_best(cfg: dict[str, Any]) -> dict[str, Any]:
-    """取指定线路（默认电信 ctcc）排名第一的 IP。"""
+    """取指定线路（默认电信 ctcc）排名第一的 IP。
+
+    速度门槛：首行速度必须严格大于 cfg["min_speed_mbps"]，否则本轮跳过，
+    避免把龟速节点记进存档。阈值 <= 0 表示不限制。
+    """
     line = cfg["line"]
     data = fetch_table(cfg)
     node = data.get(line) or {}
@@ -176,14 +195,20 @@ def pick_best(cfg: dict[str, Any]) -> dict[str, Any]:
     ip = str(best.get("ip", "")).strip()
     if not ip:
         raise RuntimeError("首行缺少 ip 字段")
-    return {
+    entry = {
         "ip": ip,
         "ping": str(best.get("ping", "")),
         "speed": str(best.get("speed", "")),
         "bandwidth": str(best.get("bandwidth", "")),
         "loss": str(best.get("loss", "")),
         "uptime": int(node.get("uptime") or 0),
+        "speed_mbps": parse_speed_mbps(best.get("speed")),
     }
+    floor = float(cfg.get("min_speed_mbps") or 0)
+    if floor > 0 and entry["speed_mbps"] <= floor:
+        raise SpeedBelowThreshold(
+            f"首行 {ip} 速度 {entry['speed_mbps']:.2f}mb/s 未超过门槛 {floor:g}mb/s，本轮跳过")
+    return entry
 
 
 # --------------------------------------------------------------------------- #
@@ -348,12 +373,16 @@ def cmd_collect(cfg: dict[str, Any], dry_run: bool = False) -> int:
     now = datetime.now()
     try:
         entry = pick_best(cfg)
+    except SpeedBelowThreshold as exc:
+        log.info("%s", exc)
+        return 0
     except Exception as exc:
         log.error("采集失败: %s", exc)
         return 1
     if dry_run:
-        log.info("[dry-run] 最优 %s IP = %s (%s, %s)", LINE_LABEL.get(cfg["line"], cfg["line"]),
-                 entry["ip"], entry["ping"], entry["speed"])
+        log.info("[dry-run] 最优 %s IP = %s (%s, %s, %.2fmb/s) 门槛 %.0fmb/s",
+                 LINE_LABEL.get(cfg["line"], cfg["line"]), entry["ip"], entry["ping"],
+                 entry["speed"], entry["speed_mbps"], float(cfg.get("min_speed_mbps") or 0))
         return 0
     append_record(cfg, entry, now)
     save_last_run({
@@ -380,6 +409,7 @@ def cmd_status(cfg: dict[str, Any]) -> int:
     print(f"线路       : {cfg['line']} ({LINE_LABEL.get(cfg['line'], '?')})")
     print(f"采集间隔   : {cfg.get('interval_minutes', 30)} 分钟")
     print(f"保留天数   : {cfg.get('retention_days', 3)} 天")
+    print(f"速度门槛   : > {cfg.get('min_speed_mbps', 0):g} mb/s（首行不达标则跳过本轮）")
     print(f"收件人     : {', '.join(cfg.get('mail', {}).get('to') or [])}")
     print(f"上次运行   : {last.get('last_run', '-')}")
     print(f"上次 IP    : {last.get('last_ip', '-')}  {last.get('last_ping', '')}")
