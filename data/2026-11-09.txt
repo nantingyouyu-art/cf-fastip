@@ -1,0 +1,4 @@
+# Cloudflare 优选IP · 电信 · 2026-11-09
+# 采集间隔: 30 分钟 | 数据源: https://api.uouin.com/index.php/index/Cloudflare
+# 序号  采集时间              IP              延迟      速度        带宽
+1     2026-11-09 01:01:00  172.64.229.106  53.08ms   60.82mb/s  486.56mb
